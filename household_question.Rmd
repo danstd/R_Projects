@@ -1,0 +1,349 @@
+---
+title: "Household Survey Transactions and Movie Survey Transactions"
+author: "Daniel Davis"
+output: html_document
+---
+#### IS 675 Fall 2017
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(width = 110)
+
+```
+
+``` {r include = FALSE}
+library(arules)
+```
+
+### Household Survey
+
+Information for different families and their grocery purchases are analyzed using the apriori algorithm to create a set of generalized rules. The dataset analyzed includes the city where each family is located, the family's income range, the number of family members, and items purchased by the family. There are 8 different cities, 8 income ranges, and 7 family member number categories that each family belongs in.
+
+```{r include = FALSE}
+# You should include insightful discussion about the associations that relate to some real world problem.
+# You will need to merge the 2 files to create a single movie dataset.
+# Include an analysis/discussion of relevant subsets using the subset function for both the household_survey and movie analyses.
+# Write the final ruleset out to a csv file for each analysis and give a link to it the report rather than listing those extremely long rulesets.
+# But do specifically mention the important association rules and subsets inside the discussion.
+```
+The csv file containing the dataset is read in as a transactions object. The read.transactions function allows the dataset structure, which tied each family transaction together with an id value, to be read in properly so that each data type remains tied in with the correct family.
+
+```{r include = TRUE}
+household <- read.transactions("household_survey.csv", format = "single", cols = c(1,2), sep = ",")
+```
+
+```{r include = TRUE}
+itemFrequencyPlot(household, support = 0.01, topN = 20, main = "Items Occurring Most Frequently", xlab = "Items", ylab = "Frequency")
+```
+
+The apriori algorithm is used to create a set of rules from the household transaction sparse matrix. Boundaries for numbers of items in the rules are set, so that all rules contain between 2 and 4 items in an attempt to keep the rules small and actionable. The default parameters for support and confidence are used. For this rule set the five most frequent items are excluded. They each appeared in the vast majority of the transactions, so any rule containing those items is likely to be obvious.
+
+``` {r include = FALSE}
+x <- capture.output({
+#A rule set from the household transaction data is created. 
+set.seed(3452)
+household_rules <- apriori(household, parameter = list(support=.1, confidence=.8, minlen=2, maxlen = 4, target='rules'), appearance = list(none = c("egg", "french_bread", "vinegar", "soy_oil", "garlic")))
+})
+#Redundant rules are removed. The function description states "A rule is redundant if a more general rules with the same or a higher confidence exists."
+household_rules <- household_rules[!is.redundant(household_rules)]
+```
+
+
+``` {r include = TRUE}
+summary(household_rules)
+```
+
+The created rule set has relatively high support and confidence values, as well as reasonable lift values.
+```{r include = TRUE}
+inspect(sort(household_rules, by='confidence', decreasing = TRUE))
+
+```
+
+The entirety of the rule set is printed above. Unfortunately each item consists of mayonnaise, the 6th most frequent item, on the right hand side. 
+Below, the rules with the highest support are examined. Below, another rule set is created, excluding the top ten most frequent items. The support and confidence thresholds are lowered to ensure that rules are created.
+
+``` {r include = FALSE}
+x <- capture.output({
+#A rule set from the household transaction data is created. 
+set.seed(3452)
+household_rules <- apriori(household, parameter = list(support=.05, confidence=.4, minlen=2, maxlen = 4, target='rules'), appearance = list(none = c("egg", "french_bread", "vinegar", "soy_oil", "garlic", "mayonnaise", "chocolate_powder", "tomato", "banana", "soda_bottle_large")))
+})
+#Redundant rules are removed. The function description states "A rule is redundant if a more general rules with the same or a higher confidence exists."
+household_rules <- household_rules[!is.redundant(household_rules)]
+
+write(household_rules, "household_rules.csv", sep = ",")
+```
+
+```{r include = TRUE}
+summary(household_rules)
+```
+
+A decent number of rules have been created, with average confidence levels that indicate the rules may be useful.
+
+```{r include = TRUE}
+inspect(sort(household_rules, by='lift', decreasing = TRUE)[1:20])
+```
+With this rule set some very high lift values are seen. Onions especially are bought much more frequently with other items than separately.
+A csv file of this rule set is available at the following link:
+
+[household transactions rule set](household_rules.csv)
+
+#### Rules by City
+
+Below, the rule set is investigated for information that can be gleaned about cities individually.
+
+```{r include = TRUE}
+cities <- c("City_Belem", "City_Belo_Horizonte", "City_Curitiba", "City_Florianopolis", "City_Fortaleza", "City_Goiania", "City_Porto_Alegre", "City_Recife")
+
+inspect(sort(subset(household_rules, subset = rhs %in% cities | lhs %in% cities), by='lift', decreasing = TRUE)[1:20])
+```
+
+The rule set does reveal some city-specific rules, such as annato in Fortaleza and coriander in Recife.
+
+```{r include = TRUE}
+household_frequency <- itemFrequency(household)
+
+household_frequency[cities]
+```
+
+For the most part the cities are represented fairly evenly in the dataset, so it does not appear that these rules only reflect which cities are included the most in the dataset.the high lift values seen suggests that these rules may be valuable insights.
+
+#### Rules by Income
+
+Below, the rule set is investigated for differences across income groups.
+
+The eight income groups included in the transactions set are as follows:
+
+```{include = TRUE, warnings = FALSE}
+Income_below_2.5
+Income_2.5_to_5
+Income_5_to_8
+Income_8_to_12
+Income_12_to_18
+Income_18_to_25
+Income_25_to_43
+Income_above_43
+```
+
+```{r include = TRUE}
+income <- c("Income_below_2.5", "Income_2.5_to_5", "Income_5_to_8", "Income_8_to_12", "Income_12_to_18", "Income_18_to_25", "Income_25_to_43", "Income_above_43")
+```
+
+
+```{r include = TRUE}
+household_frequency[income]
+```
+The income distribution is skewed slightly to the right, with far lower frequencies for the lowest and highest groups.
+
+``` {r include = TRUE}
+inspect(subset(household_rules, subset = rhs %in%  income | lhs %in% income))
+```
+Only 11 rules were created that included an income group, and these are so specific that it would be difficult to draw conclusions. For more income-based analysis it would be worthwhile to investigate item price. It is important to note that low lift values were seen for most of these rules.
+
+To see if more rules can be created a new rule set is created which does include the most frequent items. Support and confidence are left at low values, at 0.05 and 0.4 respectively.
+
+
+``` {r include = FALSE}
+x <- capture.output({
+#A rule set from the household transaction data is created. 
+set.seed(3452)
+household_rules_new <- apriori(household, parameter = list(support=.05, confidence=.4, minlen=2, maxlen = 4, target='rules'))
+})
+#Redundant rules are removed. The function description states "A rule is redundant if a more general rules with the same or a higher confidence exists."
+household_rules_new <- household_rules_new[!is.redundant(household_rules_new)]
+
+write(household_rules_new, "household_rules_new.csv")
+
+```
+
+```{r include = TRUE}
+summary(household_rules_new)
+```
+Many more rules were created by the inclusion of the most frequent items. The updated rule set csv file can be downloaded at the following link:
+ 
+ [updated household transactions rule set](household_rules_new.csv)
+ 
+```{r include = TRUE}
+inspect(sort(subset(household_rules_new, subset = lhs %in% income), by='lift', decreasing = TRUE)[1:20])
+```
+
+The rules with the highest lift are examined. Unfortunately the lift values are rather low, and again are difficult to generalize.
+
+### Conclusion
+
+From this analysis it is possible to gain insight into some differences between groceries purchased by cities, but there is little insight to be gained from income distributions. More specific item classes would be better suited to this specific task- such as higher and lower priced varieties of items.
+
+
+## Movie Survey
+
+This study focuses on rule set creation for movie watching and rating data using the Apriori algorithm provided in the R Arules package.
+
+The two movie information files are read in as data frames.
+```{r include = TRUE}
+movies <- read.csv("movies.csv")
+ratings <- read.csv("ratings.csv")
+```
+
+```{r include = TRUE}
+summary(movies)
+```
+
+Many of the genre categories are multiples of each other. This may be an issued as it leads to over specific categories.
+
+```{r include = TRUE}
+ length(unique(movies$movieId))
+```
+9125 movies are included, so it is likely that decent rules and generalizations can be gleaned from this data.
+
+
+```{r include = TRUE}
+summary(ratings)
+```
+
+The movie ratings are skewed to the right, but there is an important distinction that these represent all ratings made, not the ratings for each movie.
+
+```{r include = TRUE}
+ length(unique(ratings$movieId))
+```
+It appears that not every movie included in the movie file has a rating linked to it. Those movies without ratings are removed from the movie dataframe below.
+
+```{r include = TRUE}
+#Non-matching IDs are located.
+excluded_films  <- which(!(movies$movieId %in% ratings$movieId))
+
+#Non-matching IDs are removed.
+movies <- movies[-excluded_films,]
+
+# The new number of movies is tested.
+length(unique(movies$movieId))
+```
+
+
+The timestamp attribute likely refers to when each rating was made. This is unlikely to provide any relevant information on the movies, so the attribute is removed from the ratings dataframe.
+
+```{r include = TRUE}
+ratings$timestamp <- NULL
+```
+
+```{r include = FALSE}
+#This dataset is likely an alteration of the movielens dataset, which contains timestamps in the same format.
+```
+
+```{r include = TRUE}
+length(unique(ratings$userId))
+```
+There are 671 unique user IDs included in the ratings dataset. Below, the most frequent user IDs are shown, which indicates how many movies these users have viewed.
+
+```{r include = TRUE}
+sort(table(ratings$userId),decreasing=TRUE)[1:10]
+```
+With the top 10 users having viewed over a thousand to well over 2000 films.If these values were consistent for all reviewers then it would likely be difficult to create any meaningful association rules. However, the averages are well below these maximum values.
+
+```{r include = TRUE}
+viewing_frequency <- sort(table(ratings$userId),decreasing=TRUE)
+#Calculate the mean value
+mean(viewing_frequency)
+
+#Calculate the median value
+median(viewing_frequency)
+```
+
+```{r echo = FALSE, fig.width = 5, fig.height = 4}
+plot(viewing_frequency)
+```
+
+This plot reveals that there are a large number of power users who view far more than the average number of films. Below, the movie ratings are evaluated.
+
+```{r include = TRUE}
+summary(ratings$rating)
+```
+The movie ratings are skewed to the right, with very few movies receiving low ratings.
+
+```{r echo = FALSE, fig.width = 5, fig.height = 4}
+rating_frequency <- sort(table(ratings$rating),decreasing=TRUE)
+plot(rating_frequency)
+```
+
+This plot reveals an interesting distribution, as all half ratings are significantly lower than their full rating neighbors. This does make sense for movie ratings however, as users would be likely to bother with giving or taking away half points only for special circumstances or particular reasons.
+
+#### Analysis
+
+To create association rules, the two datasets are merged and converted into a transactions object. The function documentation recommends reading in single file-style data rather than directly converting, so this is accomplished by writing out to a csv file and then reading the file in using the Arules read.transactions function. Because movie ID and timestamps are not relevant for association rules, they are omitted from the dataset. Investigation of genres and ratings is also not suitable for association rule analysis, as this can be more easily accomplished with simpler, more straightforward techniques. 
+
+```{r include = TRUE}
+#The datasets are merged by the movieID attribute.
+movie_merged <- merge(movies, ratings, by= "movieId")
+
+#Movie Id and timestamps are removed. Columns are rearranged so userID is first.
+movie_titles <- movie_merged[,c(4,2,3,5)]
+
+#To improve performance the dataframe is written to a csv file and then read in as a transactions object.
+write.csv(movie_titles, "movie_rules.csv", row.names=FALSE)
+
+movie_data <- read.transactions("movie_rules.csv", format = "single", cols = c(1,2), sep = ",")
+```
+
+The Apriori algorithm is run with the default parameters on the transactions object.
+
+```{r include = TRUE}
+movie_rules <- apriori(movie_data)
+#Redundant rules are removed. The function description states "A rule is redundant if a more general rules with the same or a higher confidence exists."
+movie_rules <- movie_rules[!is.redundant(movie_rules)]
+
+summary(movie_rules)
+```
+
+The default parameters led to a large number of rules being created 67.5 thousand in total. 
+
+A random sampling of the rules shows that the rule set functions very well to illustrate the relationships between movies that were watched by different users.
+
+```{r include = TRUE}
+set.seed(253)
+inspect(sample(movie_rules, 5))
+```
+
+```{r include = TRUE}
+inspect(sort(movie_rules, by='lift', decreasing = TRUE)[1:20])
+```
+
+The rules with the highest lift values are viewed above. It appears that most are duplicates, and just contain variations of the same movies. To counter this, the number of items in the rules is altered.
+
+```{r include = TRUE}
+movie_rules <- apriori(movie_data, parameter = list(support=.05, confidence=.4, minlen=2, maxlen = 2, target='rules'))
+#Redundant rules are removed. The function description states "A rule is redundant if a more general rules with the same or a higher confidence exists."
+movie_rules <- movie_rules[!is.redundant(movie_rules)]
+
+summary(movie_rules)
+```
+
+The rules with the highest lift values are viewed again.
+
+```{r include = TRUE}
+inspect(sort(movie_rules, by='lift', decreasing = TRUE)[1:20])
+```
+
+This time the rules are much more manageable and actionable, with clear correlations seen between the titles on each side of the rule. Below, the rules with the highest confidence are viewed. 
+
+```{r include = TRUE}
+inspect(sort(movie_rules, by='confidence', decreasing = TRUE)[1:20])
+```
+
+Most of the movies on the right hand side are all extremely popular films, making the rules less useful than those seen above.
+
+
+```{r include = FALSE}
+write(movie_rules, "movie_rules.csv", sep = ",")
+```
+
+The rule set is written to a csv file:
+
+[movie rule set](movie_rules.csv)
+
+### Conclusion
+
+The apriori algorithm was able to create actionable rules based on movies watched by the users included in the ratings dataset. The rule set resulting from the analysis would be able to serve as a rudimentary recommendation system, with the caveat that ratings should be taken into account. It would not be necessary for ratings to be included in the rules themselves however, as it would not be necessary to show users movies similar to those they had rated poorly.
+
+#### References
+
+F. Maxwell Harper and Joseph A. Konstan. 2015. The MovieLens Datasets: History and Context. ACM Transactions on Interactive Intelligent Systems (TiiS) 5, 4, Article 19 (December 2015), 19 pages. DOI=http://dx.doi.org/10.1145/2827872
+
+https://www.r-bloggers.com/data-frames-and-transactions/

@@ -1,0 +1,163 @@
+---
+title: "Used Car Price Prediction- Question 5"
+author: "Daniel Davis"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+# Use the cars dataset Variables:
+
+# Price Offer price in EUROs
+# Age in months
+# KM Accumulated kilometers on odometer
+# FuelType Fuel type (petrol, diesel, compressed natural gas)
+# HP Horsepower
+# MetColor Metallic color (Yes=1, No=0)
+# Automatic Automatic (Yes=1, No=0)
+# CC Cylinder volume in cubic centimeters
+# Doors Number of doors
+# Weight Weight in kilograms
+
+# The objective here is to predict the sale price of a used automobile. Justify the method you want to use and analyze.
+
+library(caret)
+library(ggplot2)
+library(psych)
+
+```
+
+###Introduction
+
+In this case study linear regression models are used to predict used car prices. 
+
+###Data Exploration
+
+The csv file containing the car information dataset is read in as a dataframe. 
+```{r include = TRUE}
+cars <- read.csv("cars.csv", stringsAsFactors = TRUE)
+
+str(cars)
+```
+The dataframe consists of 10 columns, the car price and 9 attributes which may be used to predict that price. A description of the columns is as follows:
+```{include = TRUE}
+Price Offer price in EUROs
+Age: The age of the car in months.
+KM: The kilometers traveled by the car.
+FuelType: Fuel type as a string value, either petrol, diesel, or CNG for compressed natural gas.
+HP: Horsepower of the car.
+MetColor: Metallic color indicator variable, with 1 indicating the car has a metallic color.
+Automatic: Transmission indicator variable, with 1 indicating an automatic transmission.
+CC: Car cylinder volume in cubic centimeters.
+Doors: Number of doors as an integer value.
+Weight: Car weight in kilograms.
+
+
+```{r include = TRUE}
+summary(cars)
+```
+
+The dataset includes a wide range of both car prices and kilometers traveled with cars ranging from nearly new to nearly 7 years old, and at least one car with only one kilometer traveled.
+
+```{r echo = FALSE, fig.width = 8, fig.height = 7}
+pairs.panels(cars)
+```
+
+Car age has the greatest correlation with price. Age is followed by weight and kilometers traveled, which have nearly identical correlations, but with opposite signs. Horsepower has the fourth greatest correlation, and the other included attributes do not appear to be correlated with price to a degree than would be useful for prediction. The plots below display the relationship between price and the four attributes with the largest correlations between themselves and price.
+
+```{r echo = FALSE, fig.width = 4, fig.height = 4, fig.show='hold'}
+qplot(cars$Age, cars$Price, main = "Car Age and Price", xlab = "Car Age (Months)", ylab = "Car Price (Euros)")
+
+qplot(cars$KM, cars$Price, main = "Kilometers Traveled and Price", xlab = "Kilometers Traveled", ylab = "Car Price (Euros)")
+
+qplot(cars$Weight, cars$Price, main = "Car Weight and Price", xlab = "Weight (Kilograms)", ylab = "Car Price (Euros)")
+
+qplot(cars$HP, cars$Price, main = "Car Horsepower and Price", xlab = "Horsepower", ylab = "Car Price (Euros)")
+```
+
+The correlations are clearly demonstrated in these plots. There is an interesting grouping of three vehicles with the highest prices.
+
+```{r include = TRUE}
+head(cars[rev(order(cars$Price)),], 3)
+```
+
+It appears that these three may be the same model and year as each other.
+
+### Analysis
+
+A linear regression model is chosen for car price prediction. More complex methods such as random forests may likely achieve better results on this data, but a linear regression model would be  well suited for interpretation of the results. The two attributes which likely contribute the most to used car price- car model and car condition are not included in this dataset. Car model, age, mileage (or kilometers traveled), and condition would be enough to predict car pricing with a very high degree of predictive success using nearly any algorithm type. With this dataset it is more important to use a model which can help to reveal and explain associations.
+
+```{r include = TRUE}
+lm_control <- trainControl(method = "cv")
+set.seed(358)
+regression_model <- train(Price ~ ., data = cars, method = "lm", trControl = lm_control)
+
+
+summary(regression_model$finalModel)
+
+```
+The minimum and maximum residuals show some extreme deviation from true car price at least for two values, but the middle half of the predicted prices do fall within a range of less than 1470 in total. A majority of the attributes are shown to have highly significant relationships with car price as well.
+
+```{r include = TRUE}
+regression_model
+```
+
+```{r echo = FALSE, fig.width = 4, fig.height = 3, out.extra='style="float:center"'}
+plot(regression_model$finalModel)
+```
+
+
+The plot of fitted values and residuals shows a very slight hyperbola with clustering on the left-hand side, however the curve may not be severe enough to be a sign of non-linear relationships.
+
+The quantiles and residuals is much as expected, with most values falling neatly on the line indicating a normal distribution.
+
+There is some clustering on the left-hand side of the fitted values and square root residuals plot, but the distribution leads to a fairly horizontal line for variance.
+
+The leverage and residuals plot shows that all values fall fairly well inside of the Cook's distance lines, with the exception of three outliers which appear to have a significant impact on the regression model. These outliers are shown on each plot, and likely fall outside the norm of the other observations.
+
+```{r include = TRUE}
+cars[c(602, 961, 222),]
+```
+
+Observation 602 especially is a clear outlier, which may have been a show car or simply may have never been sold. These outliers are removed from the dataset and the model is built again.
+
+```{r include = TRUE}
+cars <- cars[-c(602, 961, 222),]
+```
+
+```{r include = TRUE}
+lm_control <- trainControl(method = "cv")
+set.seed(358)
+regression_model <- train(Price ~ ., data = cars, method = "lm", trControl = lm_control)
+
+
+summary(regression_model$finalModel)
+
+```
+ The minimum and maximum residuals are still quite substantial, but there is a large difference seen between this and the previous model, which shows the effect the outlying variables had on the measures of predicted success. The interquartile range was affected only slightly by the change, however. Most of the residuals, especially for predictions that were too high, could be accounted for by car condition. Most of the attributes are found to have highly significant relationships with car price, with some changes being seen from the previous model. The doors attribute relationship is now seen to be highly significant, and the transmission indicator attribute relationship is no longer significant.
+
+```{r include = TRUE}
+regression_model
+```
+
+Removing those three outliers had a tremendous effect on the error measurements displayed. The root mean squared error was affected the most, which is natural as it is most sensitive to large outlying values.
+
+```{r echo = FALSE, fig.width = 4, fig.height = 3, out.extra='style="float:center"'}
+plot(regression_model$finalModel)
+```
+
+These plots reveal that the model now has a much better fit with the dataset, especially the plot of leverage and standardized residuals
+
+### Conclusion
+
+The linear regression model was able to capture the cars dataset attributes' relationship to car price with a large degree of success. Predictive results were successful on average with variation that can be explained by known factors not included in the dataset. It is clear however that linear regression models can be sensitive  to extreme outlier values in a way that other methods such as decision trees would be largely resilient to.
+
+#### References
+
+Kim, B. (2015). Understanding Diagnostic Plots for Linear Regression Analysis. Retrieved December 09, 2017, from http://data.library.virginia.edu/diagnostic-plots/ 
+
+Lantz, B. (2015). Machine learning with R: discover how to build machine learning algorithms, prepare data, and dig deep into data prediction techniques with R. Birmingham: PACKT Publishing.
+

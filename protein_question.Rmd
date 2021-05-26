@@ -1,0 +1,372 @@
+---
+title: "Clustering of European Countries by Protein Consumption"
+output: html_document
+---
+#### Daniel Davis
+##### IS675 Fall 2017 Final Question 3
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include = FALSE}
+# Use the protein dataset. Protein study: 25 European countries (n = 25 units) and their protein intakes (in percent) from nine major food sources 
+# (p = 9). For example, Austria gets 8.9% of its protein from red meat, 19.9% from milk, and so on.
+# Analyze with k-means and 2 different methods of hierarchical clustering (new thing) and compare the results and discuss/evaluate.
+
+library(class)
+library(cluster)
+library(dendextend)
+library(ggplot2)
+library(mclust)
+library(stats)
+
+```
+
+```{r include = FALSE}
+#This function, from Machine Learning with R by Brett Lantz, takes a vector of numbers and returns a min-max normalized vector.
+normalize <- function(x) {
+	return ((x - min(x)) / (max(x) - min(x)))
+}
+
+protein <- read.csv("protein.csv")
+```
+
+### Introduction
+
+Analyze with k-means and 2 different methods of hierarchical clustering (new thing) and compare the results and discuss/evaluate.
+This case study attempts to cluster European countries based on the percentage intake from nine types of protein sources. K-means, hclust and diana clustering are performed and evaluated.
+
+### Data Exploration
+
+```{r include = TRUE}
+str(protein)
+```
+
+```{r include = TRUE}
+apply(protein[,-1], 1, sum)
+```
+
+This data set is not an exhaustive list of the protein sources for the included countries, but does represent a large majority for each country.
+
+```{r include = TRUE}
+apply(protein[,-1], 2, summary)
+```
+
+On average cereals provide the largest protein source out of the included categories, with milk coming in second place.
+
+```{r echo = FALSE}
+
+ ggplot(protein, aes(x = protein$Country, y = protein$Cereals), fill = workshop )+ geom_point()+ 
+     theme(axis.text.x = element_text(angle=60, hjust=1)) +
+     ggtitle("Protein Intake Percentage for Cereals") + xlab("Country")+ylab("Percentage of total protein intake")
+```
+
+From this plot it is clear that Eastern European countries tended to have a greater protein intake from cereals than other countries.
+
+```{r echo = FALSE}
+
+ ggplot(protein, aes(x = protein$Country, y = protein$RedMeat), fill = workshop )+ geom_point()+ 
+     theme(axis.text.x = element_text(angle=60, hjust=1)) +
+     ggtitle("Protein Intake Percentage for Red Meat") + xlab("Country")+ylab("Percentage of total protein intake")
+```
+
+On the other hand, a large percentage of protein intake from red meat is found in Western European countries, especially the British Isles.
+
+These differences indicate that clustering based on protein type may have a strong connection with geographic factors. Economic factors may also play a role, considering the stark difference between the USSR and other Iron Curtain countries and Western Europe, however the time period from when this data was gathered is unknown.
+
+### Analysis
+
+For this first analysis, k-means clustering is performed using the kmeans function in the R stats package.
+
+``` {r include = TRUE}
+
+#The protein intake percentages are normalized through min-max normalization.
+protein_n <- as.data.frame(lapply(protein[,-1], normalize))
+
+
+#The kmeans function is applied to the normalized data.
+set.seed(79835)
+clusters <- kmeans(protein_n, 5)
+```
+
+``` {r include = TRUE}
+clusters$size
+```
+
+
+``` {r include = TRUE}
+# look at the cluster centers
+clusters$centers
+```
+
+```{r include = TRUE}
+countries <- as.character(protein$Country)
+cluster_results <- cbind(countries, clusters$cluster)
+
+cluster_results <- as.data.frame(cluster_results)
+colnames(cluster_results) <- c("Country", "Cluster")
+
+cluster_results[order(cluster_results$Cluster),]
+```
+
+The clustering procedure divided the included countries perfectly into different geographical regions of Europe. The first cluster represents Northern Europe and Scandinavia, with a high percentage of protein intake from milk, starch, eggs, and fish, as well as very low intake from nuts. The second cluster represents Western Europe as well as the non-Soviet bloc Central European countries West Germany and Austria, with the highest percentages of protein intake from eggs, white meat, and red meat. The smallest cluster, 3, is composed of Portugal and Spain. This cluster has the highest percentage of intake from fruits and vegetables, as well as a high percentage intake from starch and fish. The fourth cluster consists of the USSR and Eastern European bloc countries. These countries have a very high percentage of starch intake, and relatively high white meat intake. The fifth cluster is the most diverse politically, but is very close in geographical terms, consisting of Greece, the Balkan states of Albania and Yugoslavia, Romania, and Italy. This cluster has the highest intake of cereals and nuts, and the lowest intake of starch.
+
+
+Below, the clustering procedure is repeated with 7 clusters rather than the initial value chosen of five.
+```{r include = TRUE}
+#The kmeans function is applied to the normalized data with a higher number of clusters.
+set.seed(79835)
+clusters <- kmeans(protein_n, 7)
+```
+
+``` {r include = TRUE}
+clusters$size
+```
+
+There are multiple smaller clusters, indicating that the results may be more homogeneous than those seen earlier.
+```{r include = TRUE}
+countries <- as.character(protein$Country)
+cluster_results <- cbind(countries, clusters$cluster)
+
+cluster_results <- as.data.frame(cluster_results)
+colnames(cluster_results) <- c("Country", "Cluster")
+
+cluster_results[order(cluster_results$Cluster),]
+```
+
+These results are not significantly different from those shown previously. The main difference is the splitting of Northern European countries, and the formation of a cluster consisting of Central European countries and the Netherlands. Interestingly, the Southern European cluster did not change. Geographically these results appear to be as valid as the previous results. The only surprise is the cluster of Norway and Finland excluding Sweden.
+
+A silhouette plot can be used to compare the clustering results to a dissimilarity matrix.
+
+``` {r echo = FALSE, fig.width = 6, fig.height = 8}
+#dis = dist(protein_n)^2
+dis <- dist(protein_n)
+sil <- silhouette (clusters$cluster, dis)
+png('silhouette_plot.png')
+windows()
+plot(sil)
+x <- capture.output({
+dev.off()
+})
+```
+
+
+The silhouette results show fairly poor similarity within the clusters. Finland, Poland and Switzerland appear to be extremely dissimlar to the members of their respective clusters.
+
+### Hierarchical Agglomerative Clustering with Hclust
+
+Hclust performs clustering in an agglomeration manner, beginning with each observation in its own cluster, and combining these clusters until each observation is included in a single cluster. At each stage, the two clusters that are most similar are combined.
+
+```{r include = TRUE, fig.height = 7, fig.width = 5, fig.align = 'left', warning = FALSE}
+set.seed(79835)
+hcluster_results <- hclust(dist(protein_n))
+
+protein_n$Country <- protein$Country
+
+hcluster_dendrogram <- as.dendrogram(hcluster_results)
+
+labels(hcluster_dendrogram) <- protein_n[hcluster_results$order, "Country"]
+
+ggplot(hcluster_dendrogram  %>% set('labels_cex', 0.6), horiz = TRUE)
+
+protein_n$Country <- NULL
+
+hcluster_results
+```
+
+The dendrogram created from the hclust results shows similar clusters to those created using the k-means algorithm, but more information can be gleaned from the tree structure. The k-means results indicated that the Eastern European countries were mostly a single group, while the dendrogram reveals that there is no such solidarity.
+
+Below, silhouette plots are created for different numbers of clusters, ranging from two to seven, in an attempt to discover how hclust's tree structure can best be consolidated into clusters.
+
+``` {r echo = FALSE, fig.width = 4, fig.height = 5.75}
+par(mfrow=c(2,3))
+
+hclust_sil_2 <- silhouette(cutree(hcluster_results,2),dis)
+png('hclust_silhouette_plot_3.png')
+windows()
+plot(hclust_sil_2, main = "Hclust 2 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+hclust_sil_3 <- silhouette(cutree(hcluster_results,3),dis)
+png('hclust_silhouette_plot_3.png')
+windows()
+plot(hclust_sil_3, main = "Hclust 3 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+hclust_sil_4 <- silhouette(cutree(hcluster_results,4),dis)
+png('hclust_silhouette_plot_4.png')
+windows()
+plot(hclust_sil_4, main = "Hclust 4 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+hclust_sil_5 <- silhouette(cutree(hcluster_results,5),dis)
+png('hclust_silhouette_plot.png')
+windows()
+plot(hclust_sil_5, main = "Hclust 5 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+hclust_sil_6 <- silhouette(cutree(hcluster_results,6),dis)
+png('hclust_silhouette_plot_6.png')
+windows()
+plot(hclust_sil_6, main = "Hclust 6 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+
+hclust_sil_7 <- silhouette(cutree(hcluster_results,7),dis)
+png('hclust_silhouette_plot_7.png')
+windows()
+plot(hclust_sil_7, main = "Hclust 7 Clusters")
+x <- capture.output({
+dev.off()
+})
+```
+
+
+The silhouette results show that three clusters leads to the highest score. With this number of clusters some interesting groupings are still visible. As shown below, the first cluster consists primarily of Eastern European countries, with Greece and Italy included. It is noteworthy that Czechoslovakia is included in the cluster consisting of West and Northern European countries. The protein intake for Spain and Portugal is apparently more similar than other country groupings, as they make up a single cluster.
+
+```{r echo = FALSE}
+cluster_results <- cbind(countries, cutree(hcluster_results,3))
+cluster_results <- as.data.frame(cluster_results)
+colnames(cluster_results) <- c("Country", "Cluster")
+cluster_results[order(cluster_results$Cluster),]
+```
+
+
+
+### Divisive Hierarchical Clustering with Diana
+
+The diana algorithm performs hierarchical clustering in the opposite direction from the hclust algorithm, starting from a single all-inclusive cluster, and dividing into increasingly smaller clusters down to a single cluster for each observation. At each stage, the cluster with the largest average dissimilarity is split. Below, diana clustering is performed on the normalized protein intake dataset. As with the hclust algorithm, a dissimilarity matrix of the dataset is passed to the diana function.
+
+```{r include = TRUE}
+set.seed(79835)
+diana_results <- diana(dist(protein_n))
+```
+
+```{r echo = FALSE, fig.height = 7, fig.width = 5, fig.align = 'left', warning = FALSE}
+protein_n$Country <- protein$Country
+
+diana_dendrogram <- as.dendrogram(diana_results)
+
+labels(diana_dendrogram) <- protein_n[diana_results$order, "Country"]
+
+ggplot(diana_dendrogram  %>% set('labels_cex', 0.6), horiz = TRUE)
+
+protein_n$Country <- NULL
+```
+
+The diana dendrogram shows more expected results from a geographical perspective. Below, the same silhouette procedure is repeated as was performed on the hclust results.
+
+``` {r echo = FALSE, fig.width = 4, fig.height = 5.75}
+par(mfrow=c(2,3))
+
+diana_dendrogram <- as.dendrogram(diana_results)
+
+diana_sil_2 <- silhouette(cutree(diana_dendrogram, 2),dis)
+png('diana_silhouette_plot_11.png')
+windows()
+plot(diana_sil_2, main = "Diana 2 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+diana_sil_3 <- silhouette(cutree(diana_dendrogram,3),dis)
+png('diana_silhouette_plot_3.png')
+windows()
+plot(diana_sil_3, main = "Diana 3 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+diana_sil_4 <- silhouette(cutree(diana_dendrogram, 4),dis)
+png('diana_silhouette_plot_4.png')
+windows()
+plot(diana_sil_4, main = "Diana 4 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+diana_sil_5 <- silhouette(cutree(diana_dendrogram, 5),dis)
+png('diana_silhouette_plot_5.png')
+windows()
+plot(diana_sil_5, main = "Diana 5 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+diana_sil_6 <- silhouette(cutree(diana_dendrogram,6),dis)
+png('diana_silhouette_plot_11.png')
+windows()
+plot(diana_sil_6, main = "Diana 6 Clusters")
+x <- capture.output({
+dev.off()
+})
+
+diana_sil_7 <- silhouette(cutree(diana_dendrogram, 7),dis)
+png('diana_silhouette_plot_7.png')
+windows()
+plot(diana_sil_7, main = "Diana 7 Clusters")
+x <- capture.output({
+dev.off()
+})
+```
+
+Interestingly, the diana results confirmed that 3 clusters had the best fit for the observations.
+
+```{r echo = FALSE}
+diana_results <- cbind(countries, cutree(diana_dendrogram,3))
+diana_results <- as.data.frame(diana_results)
+colnames(diana_results) <- c("Country", "Cluster")
+diana_results[order(diana_results$Cluster),]
+```
+
+The only difference between the three-cluster groupings between hclust and diana results is that the diana clustering placed the USSR with the second rather than the first cluster.
+
+Below, k-means clustering is repeated again with the specification for three clusters.
+
+```{r include = TRUE}
+set.seed(79835)
+clusters <- kmeans(protein_n, 3)
+```
+
+
+```{r include = TRUE}
+countries <- as.character(protein$Country)
+cluster_results <- cbind(countries, clusters$cluster)
+
+cluster_results <- as.data.frame(cluster_results)
+colnames(cluster_results) <- c("Country", "Cluster")
+
+cluster_results[order(cluster_results$Cluster),]
+```
+
+The k-means clustering agrees exactly with the hclust results.
+
+### Conclusions
+
+Clustering on protein intake percentages for European countries largely confirmed geographical differences. Each clustering algorithm tested, k-means, hclust, and diana produced extremely similar results. The silhouette widths for the clusters were not incredibly high, but moderate agreement was seen with small cluster sizes.In general a split was seen between Eastern and Western European countries, with Spain and Portugal consistently grouped together apart from the other clusters.
+
+#### References
+
+Kodali, T. (2016, January 22). Hierarchical Clustering in R. Retrieved November 20, 2017, from https://www.r-bloggers.com/hierarchical-clustering-in-r-2/ 
+
+Lantz, B. (2015). Machine learning with R: discover how to build machine learning algorithms, prepare data, and dig deep into data prediction techniques with R. Birmingham: PACKT Publishing.
+
+https://www.statmethods.net/advstats/cluster.html
+
+https://www.stat.berkeley.edu/~spector/s133/Clus.html
+
+https://stat.ethz.ch/R-manual/R-devel/library/cluster/html/diana.html
+
+https://stat.ethz.ch/R-manual/R-devel/library/stats/html/hclust.html
