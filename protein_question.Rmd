@@ -1,6 +1,6 @@
 ---
 title: "Clustering of European Countries by Protein Consumption"
-output: html_document
+output: github_document
 ---
 #### Daniel Davis
 ##### IS675 Fall 2017 Final Question 3
@@ -25,7 +25,7 @@ library(stats)
 ```
 
 ```{r include = FALSE}
-#This function, from Machine Learning with R by Brett Lantz, takes a vector of numbers and returns a min-max normalized vector.
+# This function, from Machine Learning with R by Brett Lantz, takes a vector of numbers and returns a min-max normalized vector.
 normalize <- function(x) {
 	return ((x - min(x)) / (max(x) - min(x)))
 }
